@@ -69,7 +69,7 @@ public class ActiveMQInvoiceService implements InvoiceService {
     
     @JmsListener(destination = "${activemq.queue.payment}")
     @Transactional
-    public void processJmsMessage(Message jmsMessage) {
+    public void processJmsMessage(Message jmsMessage) throws JMSException {
         try {
             // Extract the PaymentMessage from the JMS Message
             PaymentMessage message = (PaymentMessage) messageConverter.fromMessage(jmsMessage);

@@ -220,71 +220,107 @@ After initial fixes, I still observed issues with spans for Kafka and RabbitMQ, 
    ```
 
 2. **Messaging System-Specific Configuration**
+# Thread Context Propagation with Multithreaded Processing
 
-   I added these system-specific flags in each service's `entrypoint.sh`:
+In our billing system demo, we faced challenges with trace context propagation across thread boundaries in our microservices architecture. Here's how we solved it across different messaging systems:
 
-   For ActiveMQ services:
-   ```bash
-   -Dotel.instrumentation.activemq.message-propagation.enabled=true
-   -Dotel.instrumentation.jms.experimental.producer-messaging-links.enabled=true
-   ```
+## The Problem
 
-   For Kafka services:
-   ```bash
-   -Dotel.instrumentation.kafka.experimental.message-propagation.enabled=true
-   -Dotel.instrumentation.kafka.experimental.messages.enabled=true
-   ```
-
-   For RabbitMQ services:
-   ```bash
-   -Dotel.instrumentation.rabbitmq.experimental.message-propagation.enabled=true
-   -Dotel.instrumentation.rabbitmq.experimental.consumer-parent-span-enabled=true
-   ```
-
-Here's the content formatted in Markdown:
-
-```markdown
-### Thread Context Propagation with Multithreaded Processing
-
-Traces were breaking between the payment processor and invoice aggregator services (a multi-threaded service that "de-queues" many messages at once). The issue was missing trace context propagation across thread boundaries.
+Traces were breaking between the payment processor and invoice aggregator services (a multi-threaded service that dequeues many messages at once). The issue was missing trace context propagation across thread boundaries.
 
 The problem occurred because:
-1. The invoice aggregator services received messages from messaging systems (Kafka/ActiveMQ/RabbitMQ)
+1. The invoice aggregator received messages from messaging systems (Kafka/ActiveMQ/RabbitMQ)
 2. Processing was done in separate threads via an ExecutorService
-3. The tracing context was not properly passed to these worker threads in the OpenTelemetry implementations
+3. The tracing context wasn't properly passed to these worker threads
 
-This caused traces to appear terminated at the payment processor when using OpenTelemetry, even though the invoice aggregator was successfully processing messages.
+## Solution Components
 
-### Solution
+### 1. Context Propagating Executor Service
 
-After initial fixes, I still observed issues with spans for Kafka and ActiveMQ with OpenTelemetry, while RabbitMQ was working correctly. A more comprehensive approach was needed:
+We created a wrapper around the standard ExecutorService to automatically propagate OpenTelemetry context:
 
-1. **Context Propagator Configuration**
+```java
+public class ContextPropagatingExecutorService {
+    private final ExecutorService executorService;
+    
+    public void execute(Runnable task) {
+        // Capture the current context before submitting to the executor
+        Context context = Context.current();
+        
+        executorService.execute(() -> {
+            // Make the captured context current in the worker thread
+            try (Scope scope = context.makeCurrent()) {
+                task.run();
+            }
+        });
+    }
+}
+```
 
-   I added these flags to the `entrypoint.sh` files for all OpenTelemetry services:
-   ```bash
-   # Explicitly configure propagators
-   -Dotel.propagators=tracecontext,baggage
-   ```
+### 2. Messaging System-Specific Configuration
 
-2. **Messaging System-Specific Configuration**
+Each messaging system required different configuration for proper context propagation:
 
-   I added these system-specific flags in each service's `entrypoint.sh`:
+#### For RabbitMQ
+RabbitMQ worked most reliably with minimal configuration:
+```
+-Dotel.instrumentation.rabbitmq.experimental.message-propagation.enabled=true
+-Dotel.instrumentation.rabbitmq.experimental.consumer-parent-span-enabled=true
+```
 
-   For ActiveMQ services:
-   ```bash
-   -Dotel.instrumentation.activemq.message-propagation.enabled=true
-   -Dotel.instrumentation.jms.experimental.producer-messaging-links.enabled=true
-   ```
+#### For Kafka
+Kafka required more extensive configuration:
+```
+-Dotel.instrumentation.kafka.experimental.message-propagation.enabled=true
+-Dotel.instrumentation.kafka.experimental.messages.enabled=true
+-Dotel.instrumentation.kafka.experimental.consumer-parent-span-enabled=true
+-Dotel.instrumentation.kafka.experimental.producer-attribute-capturing.enabled=true
+-Dotel.instrumentation.kafka.experimental.consumer-attribute-capturing.enabled=true
+```
 
-   For Kafka services:
-   ```bash
-   -Dotel.instrumentation.kafka.experimental.message-propagation.enabled=true
-   -Dotel.instrumentation.kafka.experimental.messages.enabled=true
-   ```
+#### For ActiveMQ
+ActiveMQ required JMS-specific settings:
+```
+-Dotel.instrumentation.activemq.message-propagation.enabled=true
+-Dotel.instrumentation.jms.experimental.producer-messaging-links.enabled=true
+-Dotel.instrumentation.jms.experimental.consumer-parent-span-enabled=true
+-Dotel.instrumentation.jms.experimental.receive-telemetry.enabled=true
+```
 
-   For RabbitMQ services:
-   ```bash
-   -Dotel.instrumentation.rabbitmq.experimental.message-propagation.enabled=true
-   -Dotel.instrumentation.rabbitmq.experimental.consumer-parent-span-enabled=true
-   ```
+### 3. Manual Context Injection/Extraction (ActiveMQ and Kafka)
+
+For ActiveMQ and Kafka, we needed to manually handle context propagation by:
+
+1. Injecting context into outgoing message headers:
+```java
+OpenTelemetry.getPropagators().getTextMapPropagator()
+    .inject(Context.current(), headers, HeaderSetter);
+```
+
+2. Extracting context from incoming message headers:
+```java
+Context extractedContext = OpenTelemetry.getPropagators().getTextMapPropagator()
+    .extract(Context.current(), headers, HeaderGetter);
+```
+
+### 4. Common Configuration
+
+All services required these base settings:
+```
+-Dotel.propagators=tracecontext,baggage
+-Dotel.instrumentation.tasks.propagate-across-threads=true
+-Dotel.instrumentation.executors.enabled=true
+-Dotel.instrumentation.executor.propagate-context=true
+```
+
+## Why RabbitMQ Worked Without Manual Context Handling
+
+RabbitMQ worked more reliably without manual context injection/extraction because:
+
+1. The AMQP protocol RabbitMQ uses has different header handling than Kafka or JMS
+2. OpenTelemetry's RabbitMQ instrumentation has more mature context propagation
+3. RabbitMQ preserves message headers more consistently throughout the messaging chain
+
+## Results
+
+After implementing these solutions, we achieved complete end-to-end tracing across all messaging systems, allowing us to track transactions from the load simulator through the billing service, payment processor, and finally to the invoice aggregator, even with multi-threaded processing.​​​​​​​​​​​​​​​​

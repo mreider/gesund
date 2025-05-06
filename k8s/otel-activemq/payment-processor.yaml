@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-processor
+  namespace: otel-activemq
+  labels:
+    app: payment-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-processor
+  template:
+    metadata:
+      labels:
+        app: payment-processor
+    spec:
+      containers:
+      - name: payment-processor
+        image: ghcr.io/mreider/payment-processor:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:postgresql://postgres.otel-activemq:5432/billingdb
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: MESSAGING_SYSTEM
+          value: "activemq"
+        - name: OPENTELEMETRY_ENABLED
+          value: "true"
+        - name: OTEL_SDK_DISABLED
+          value: "false"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+        - name: ACTIVEMQ_BROKER_URL
+          value: "tcp://activemq.otel-activemq:61616"
+        - name: DYNATRACE_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: dynatrace-secret
+              key: endpoint
+        - name: DYNATRACE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: dynatrace-secret
+              key: api-token
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-processor
+  namespace: otel-activemq
+spec:
+  selector:
+    app: payment-processor
+  ports:
+  - port: 8081
+    targetPort: 8081
+  type: ClusterIP

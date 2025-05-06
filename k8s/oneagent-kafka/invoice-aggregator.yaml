@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invoice-aggregator
+  namespace: oneagent-kafka
+  labels:
+    app: invoice-aggregator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: invoice-aggregator
+  template:
+    metadata:
+      labels:
+        app: invoice-aggregator
+      annotations:
+        dynatrace.com/inject-oneagent: "true"
+    spec:
+      containers:
+      - name: invoice-aggregator
+        image: ghcr.io/mreider/invoice-aggregator:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8082
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:postgresql://postgres.oneagent-kafka:5432/billingdb
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: MESSAGING_SYSTEM
+          value: "kafka"
+        - name: OPENTELEMETRY_ENABLED
+          value: "false"
+        - name: OTEL_SDK_DISABLED
+          value: "true"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-service.oneagent-kafka:9092"
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: invoice-aggregator
+  namespace: oneagent-kafka
+spec:
+  selector:
+    app: invoice-aggregator
+  ports:
+  - port: 8082
+    targetPort: 8082
+  type: ClusterIP

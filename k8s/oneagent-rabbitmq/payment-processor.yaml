@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-processor
+  namespace: oneagent-rabbitmq
+  labels:
+    app: payment-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-processor
+  template:
+    metadata:
+      labels:
+        app: payment-processor
+      annotations:
+        dynatrace.com/inject-oneagent: "true"
+    spec:
+      containers:
+      - name: payment-processor
+        image: ghcr.io/mreider/payment-processor:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8081
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:postgresql://postgres.oneagent-rabbitmq:5432/billingdb
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: MESSAGING_SYSTEM
+          value: "rabbitmq"
+        - name: OPENTELEMETRY_ENABLED
+          value: "false"
+        - name: OTEL_SDK_DISABLED
+          value: "true"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq.oneagent-rabbitmq"
+        - name: RABBITMQ_PORT
+          value: "5672"
+        - name: RABBITMQ_USERNAME
+          value: "admin"
+        - name: RABBITMQ_PASSWORD
+          value: "admin"
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-processor
+  namespace: oneagent-rabbitmq
+spec:
+  selector:
+    app: payment-processor
+  ports:
+  - port: 8081
+    targetPort: 8081
+  type: ClusterIP

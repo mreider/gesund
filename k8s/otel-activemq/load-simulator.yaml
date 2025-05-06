@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-simulator
+  namespace: otel-activemq
+  labels:
+    app: load-simulator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: load-simulator
+  template:
+    metadata:
+      labels:
+        app: load-simulator
+    spec:
+      containers:
+      - name: load-simulator
+        image: ghcr.io/mreider/load-simulator:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8083
+        env:
+        - name: OPENTELEMETRY_ENABLED
+          value: "true"
+        - name: OTEL_SDK_DISABLED
+          value: "false"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+        - name: BILLING_SERVICE_URL
+          value: "http://billing-service.otel-activemq:8080"
+        - name: DYNATRACE_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: dynatrace-secret
+              key: endpoint
+        - name: DYNATRACE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: dynatrace-secret
+              key: api-token
+        resources:
+          limits:
+            cpu: "300m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: load-simulator
+  namespace: otel-activemq
+spec:
+  selector:
+    app: load-simulator
+  ports:
+  - port: 8083
+    targetPort: 8083
+  type: ClusterIP

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-simulator
+  namespace: oneagent-rabbitmq
+  labels:
+    app: load-simulator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: load-simulator
+  template:
+    metadata:
+      labels:
+        app: load-simulator
+      annotations:
+        dynatrace.com/inject-oneagent: "true"
+    spec:
+      containers:
+      - name: load-simulator
+        image: ghcr.io/mreider/load-simulator:latest
+        imagePullPolicy: Always
+        env:
+        - name: BILLING_SERVICE_URL
+          value: "http://billing-service.oneagent-rabbitmq:8080"
+        - name: OPENTELEMETRY_ENABLED
+          value: "false"
+        - name: OTEL_SDK_DISABLED
+          value: "true"
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"

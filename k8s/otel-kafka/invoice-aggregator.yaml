@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invoice-aggregator
+  namespace: otel-kafka
+  labels:
+    app: invoice-aggregator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: invoice-aggregator
+  template:
+    metadata:
+      labels:
+        app: invoice-aggregator
+    spec:
+      containers:
+      - name: invoice-aggregator
+        image: ghcr.io/mreider/invoice-aggregator:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8082
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: jdbc:postgresql://postgres.otel-kafka:5432/billingdb
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: username
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: MESSAGING_SYSTEM
+          value: "kafka"
+        - name: OPENTELEMETRY_ENABLED
+          value: "true"
+        - name: OTEL_SDK_DISABLED
+          value: "false"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-service.otel-kafka:9092"
+        - name: DYNATRACE_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: dynatrace-secret
+              key: endpoint
+        - name: DYNATRACE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: dynatrace-secret
+              key: api-token
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: invoice-aggregator
+  namespace: otel-kafka
+spec:
+  selector:
+    app: invoice-aggregator
+  ports:
+  - port: 8082
+    targetPort: 8082
+  type: ClusterIP

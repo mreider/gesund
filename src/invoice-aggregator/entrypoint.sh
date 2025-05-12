@@ -31,6 +31,14 @@ fi
 if [ "$OPENTELEMETRY_ENABLED" = "true" ]; then
   echo "Starting with OpenTelemetry instrumentation"
   exec java \
+    -Xms256m \
+    -Xmx384m \
+    -XX:+DisableExplicitGC \
+    -XX:-UseAdaptiveSizePolicy \
+    -XX:+AlwaysPreTouch \
+    -XX:-ShrinkHeapInSteps \
+    -XX:MinHeapFreeRatio=0 \
+    -XX:MaxHeapFreeRatio=10 \
     -javaagent:/app/opentelemetry-javaagent.jar \
     -Dotel.service.name=${SPRING_APPLICATION_NAME:-invoice-aggregator} \
     -Dotel.exporter.otlp.endpoint=${DYNATRACE_ENDPOINT} \
@@ -71,5 +79,20 @@ if [ "$OPENTELEMETRY_ENABLED" = "true" ]; then
     -jar app.jar
 else
   echo "Starting without OpenTelemetry instrumentation"
-  exec java -jar app.jar
+  # Set JVM memory settings to make OOM kills more likely:
+  # - Set initial heap size to 256MB (half of container limit)
+  # - Set max heap size to 384MB (75% of container limit)
+  # - Disable JVM heap expansion to make memory pressure more immediate
+  # - Disable JVM heap shrinking to prevent memory recovery
+  # - Disable adaptive sizing to prevent JVM from optimizing memory usage
+  exec java \
+    -Xms256m \
+    -Xmx384m \
+    -XX:+DisableExplicitGC \
+    -XX:-UseAdaptiveSizePolicy \
+    -XX:+AlwaysPreTouch \
+    -XX:-ShrinkHeapInSteps \
+    -XX:MinHeapFreeRatio=0 \
+    -XX:MaxHeapFreeRatio=10 \
+    -jar app.jar
 fi

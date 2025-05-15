@@ -198,7 +198,7 @@ Consider creating the following in Dynatrace for better insights:
 
 ### Trace Context Propagation with Multithreaded Processing
 
-Traces Ire breaking betIen the payment processor and invoice aggregator services (a multi-threaded service that "de-queues" many messages at once). The issue was missing trace context propagation across thread boundaries.
+Traces are breaking between the payment processor and invoice aggregator services (a multi-threaded service that "de-queues" many messages at once). The issue was missing trace context propagation across thread boundaries.
 
 The problem occurred because:
 1. The invoice aggregator services received messages from messaging systems (Kafka/ActiveMQ/RabbitMQ)

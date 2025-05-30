@@ -47,12 +47,12 @@ public class MemoryLeakSimulator {
         log.info("First memory leak will start in {} seconds", initialDelay);
         
         // Schedule deterministic memory leaks every 15 minutes
-        scheduler.scheduleAtFixedRate(() -> {
-            if (!currentlyLeaking) {
-                log.info("Scheduled memory leak triggered - starting aggressive memory allocation");
-                startMemoryLeak();
-            }
-        }, initialDelay, LEAK_INTERVAL_SECONDS, TimeUnit.SECONDS);
+        // scheduler.scheduleAtFixedRate(() -> {
+        //     if (!currentlyLeaking) {
+        //         log.info("Scheduled memory leak triggered - starting aggressive memory allocation");
+        //         startMemoryLeak();
+        //     }
+        // }, initialDelay, LEAK_INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
     
     /**

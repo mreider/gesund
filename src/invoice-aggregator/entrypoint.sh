@@ -41,9 +41,11 @@ if [ "$OPENTELEMETRY_ENABLED" = "true" ]; then
     -XX:MaxHeapFreeRatio=10 \
     -javaagent:/app/opentelemetry-javaagent.jar \
     -Dotel.service.name=${SPRING_APPLICATION_NAME:-invoice-aggregator} \
-    -Dotel.exporter.otlp.endpoint=${DYNATRACE_ENDPOINT} \
     -Dotel.exporter.otlp.protocol=http/protobuf \
-    -Dotel.exporter.otlp.headers="Authorization=Api-Token ${DYNATRACE_API_TOKEN}" \
+    -Dotel.exporter.otlp.traces.endpoint=${DYNATRACE_ENDPOINT}/v1/traces \
+    -Dotel.exporter.otlp.traces.headers="Authorization=Api-Token ${DYNATRACE_API_TOKEN}" \
+    -Dotel.exporter.otlp.metrics.endpoint=${DYNATRACE_ENDPOINT}/v1/metrics \
+    -Dotel.exporter.otlp.metrics.headers="Authorization=Api-Token ${DYNATRACE_API_TOKEN}" \
     -Dotel.traces.exporter=otlp \
     -Dotel.metrics.exporter=otlp \
     -Dotel.logs.exporter=otlp \

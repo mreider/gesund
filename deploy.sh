@@ -1,41 +1,30 @@
 #!/bin/bash
 set -e
 
-# Function to clean up resources in a namespace
-cleanup_namespace() {
-  local namespace=$1
-  echo "Cleaning up resources in namespace: $namespace"
-  
-  # Delete all deployments
-  kubectl delete deployments --all -n $namespace --ignore-not-found=true
-  
-  # Delete all services
-  kubectl delete services --all -n $namespace --ignore-not-found=true
-  
-  # Delete all pods
-  kubectl delete pods --all -n $namespace --ignore-not-found=true
-  
-  # Delete all PVCs
-  kubectl delete pvc --all -n $namespace --ignore-not-found=true
-  
-  # Delete all secrets
-  kubectl delete secrets --all -n $namespace --ignore-not-found=true
-  
-  echo "Cleanup completed for namespace: $namespace"
-}
-
 # Create namespaces
 echo "Creating namespaces..."
 kubectl apply -f k8s/namespaces.yaml
 
-# Clean up existing resources
-echo "Cleaning up existing resources..."
-cleanup_namespace "otel-kafka"
-cleanup_namespace "otel-activemq"
-cleanup_namespace "otel-rabbitmq"
-cleanup_namespace "oneagent-kafka"
-cleanup_namespace "oneagent-activemq"
-cleanup_namespace "oneagent-rabbitmq"
+echo "Ensuring dynatrace namespace exists..."
+kubectl create namespace dynatrace || echo "Namespace dynatrace already exists or error creating it."
+
+# --- BEGIN Dynatrace Operator Deployment ---
+echo "Deploying Dynatrace Operator..."
+
+# dynatrace namespace is expected to exist at this point
+echo "Installing Dynatrace Operator with CSI..."
+kubectl apply -f https://github.com/Dynatrace/dynatrace-operator/releases/download/v1.5.1/kubernetes-csi.yaml
+
+echo "Waiting for Dynatrace Operator webhook to be ready..."
+kubectl -n dynatrace wait pod --for=condition=ready --selector=app.kubernetes.io/name=dynatrace-operator,app.kubernetes.io/component=webhook --timeout=300s
+
+echo "Applying Dynatrace Operator secret (k8s/dynakube-operator-secret.yaml) to dynatrace namespace..."
+echo "NOTE: Ensure you have created 'k8s/dynakube-operator-secret.yaml' from the template and filled in your tokens."
+kubectl apply -f k8s/dynakube-operator-secret.yaml -n dynatrace
+
+echo "Applying DynaKube custom resource..."
+kubectl apply -f k8s/dynakube.yaml -n dynatrace
+# --- END Dynatrace Operator Deployment ---
 
 # Create Dynatrace secret in each namespace
 echo "Creating Dynatrace secret..."

@@ -82,6 +82,7 @@ kubeconfig
 
 # Dynatrace
 dynatrace-secret.yaml
+dynakube-operator-secret.yaml
 
 # Application specific
 application-local.properties
